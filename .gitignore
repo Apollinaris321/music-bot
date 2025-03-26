@@ -1,0 +1,6 @@
+#gitignore
+
+.env
+cookies.txt
+build
+dist
