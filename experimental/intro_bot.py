@@ -12,6 +12,9 @@ from collections import deque
 from dotenv import load_dotenv
 
 
+# TODO only plays music no intros
+
+
 
 #TODO
 # - dont allow more than 10 songs
@@ -41,7 +44,7 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
-cookie_path = "cookies.txt"
+cookie_path = "../cookies.txt"
 
 
 load_dotenv()
@@ -256,8 +259,6 @@ async def next(ctx):
 @bot.command()
 async def set_intro(ctx, url: str, start_time: int, stop_time: int):
     """[url] [start_time_seconds] [stop_time_seconds] . example: youtube.com/watchdd 82 90   sets the intro song for a user. will play everytime the user joins the channel. every user can only have one. new song will overwrite old one"""
-    global voice_client
-
     print(f"start:{start_time}, stop: {stop_time}, user_id: {ctx.author.id}, url: {url}")
 
     # Validate inputs

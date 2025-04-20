@@ -1,9 +1,12 @@
-import yt_dlp
 import os
+import yt_dlp
+
+
 
 def download_audio_snippet(url="", start=0, stop=0, output_file="snippet"):
     print(f"download_audio_snippet: start:{start}, stop:{stop} url:{url}, output_file:{output_file}")
     output_file = str(output_file)
+    cookie_path = "cookies.txt"
 
     if start > stop:
         return
@@ -37,16 +40,10 @@ def download_audio_snippet(url="", start=0, stop=0, output_file="snippet"):
         'verbose': False,
         'logger': None,
         'progress_hooks': [],
+        "cookiefile": cookie_path,
     }
 
     with yt_dlp.YoutubeDL(options) as ydl:
         ydl.download([url])
 
     print(f"Audio snippet saved as {output_file}")
-
-# url = "https://www.youtube.com/watch?v=ZXZMIC-Z-XA&ab_channel=%C3%9Cst%C3%A2dKem%C3%A2nke%C5%9F%F0%9F%8F%B9"
-# user_name = "984511687942094888"
-# start = 4
-# stop = 9
-#
-# download_audio_snippet(url, start, stop, user_name)

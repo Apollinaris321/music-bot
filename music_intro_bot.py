@@ -10,22 +10,8 @@ import time
 import threading
 import sys
 import signal
-from Song import Song, Playlist
 from collections import deque
 from dotenv import load_dotenv
-
-#TODO
-# - start song at specific time
-# - timestamp when song started playing
-# - stop song and store time when stopped
-# - use the play_after hook form play_song to check if the intro queue is full
-#   - if there is a song in the intro queue play it
-#   - do this until the intro queue is empty then play the playlist again
-#   - intro can just be added to the intro queue
-#   - in the intro event check if intro queue is empty if yes -> stop playlist
-
-# custom stop and start functionality that stores the time and timestamp
-# set intro code | userId , url, start, stop
 
 
 #   ctx
@@ -36,56 +22,16 @@ from dotenv import load_dotenv
 #   move_to()
 #   is_connected()
 
-"""
-FLAGS/ATTRIBUTES
-voice_client.is_connected() -> bool:
-Crucial: Checks if the underlying websocket connection to the voice channel is currently active. Returns True if connected, False otherwise. Always check this before trying to interact extensively.
-
-voice_client.is_playing() -> bool:
-Crucial for Music: Returns True if the bot is currently sending audio data (i.e., a song is playing via voice_client.play()).
-
-voice_client.is_paused() -> bool:
-Crucial for Music: Returns True if playback has been paused using voice_client.pause().
-
-voice_client.channel -> discord.VoiceChannel:
-Tells you which specific VoiceChannel object this client is connected to.
-
-voice_client.play(source: discord.AudioSource, *, after=None):
-
-FUNCTIONS
-
-Sends audio data to Discord.
-source: An object that provides audio data. For music, this is almost always an instance of discord.FFmpegPCMAudio (or similar like discord.PCMVolumeTransformer wrapping it).
-after: An optional callback function that gets executed synchronously when the source finishes playing or when voice_client.stop() is called.
-This callback receives one argument: an Exception object if playback failed, or None if it finished normally or was stopped.
-Vital for queues: The after callback is where you typically trigger the logic to play the next song (often by scheduling your player loop coroutine using asyncio.create_task or bot.loop.call_soon_threadsafe).
-
-voice_client.pause():
-Pauses the current audio playback. is_playing() becomes False, is_paused() becomes True.
-Does NOT trigger the after callback.
-
-voice_client.resume():
-Resumes paused audio playback. is_playing() becomes True, is_paused() becomes False.
-
-voice_client.stop():
-Completely stops the current audio playback. is_playing() becomes False.
-DOES trigger the after callback. This is key! stop() signals the end of the current audio stream.
-
-voice_client.disconnect(*, force=False):
-Crucial: Disconnects the bot from the voice channel. The VoiceClient object becomes invalid after this. is_connected() will become False.
-Set force=True if you want to bypass the standard cleanup (rarely needed).
-"""
-
-# Guild == Server
-
 # Handle termination signals
 async def shutdown():
     print("Shutting down gracefully...")
     await bot.close()  # Disconnect from Discord
     sys.exit(0)  # Exit script cleanly
 
+
 def signal_handler(sig, frame):
     asyncio.create_task(shutdown())  # Run the shutdown coroutine
+
 
 # Register signal handlers
 signal.signal(signal.SIGTERM, signal_handler)
@@ -126,8 +72,7 @@ class Playlist():
 
     async def add_song(self, info, start=0):
         async with self.lock:
-            timestamp = time.time()
-            self.playlist.append({'info': info, 'start': start, 'start_timestamp': timestamp, 'pause_timestamp': 0})
+            self.playlist.append({'info': info, 'start': start, 'start_timestamp': 0, 'pause_timestamp': 0})
 
     async def pause(self):
         async with self.lock:
@@ -186,6 +131,9 @@ class Playlist():
         async with self.lock:
             if len(self.intro_playlist) > 0:
                 asyncio.create_task(self.play_song())
+
+            elif self.was_playing_music:
+                asyncio.create_task(self.play_song())
             else:
                 next_index = self.song_index + 1
 
@@ -196,15 +144,12 @@ class Playlist():
     async def play_song(self):
         async with self.lock:
             if self.voice_client and self.voice_client.is_connected() and not self.voice_client.is_playing() and not self.voice_client.is_paused():
-                if len(self.intro_playlist) > 0:
-                    url = self.intro_playlist.pop()
-                    url = "https://rr4---sn-4g5edndr.googlevideo.com/videoplayback?expire=1745112897&ei=4foDaN7gFrGPi9oPrMqsqQM&ip=2003%3Af0%3A3f13%3A709%3A203c%3A4d22%3A29ec%3Adf5d&id=o-ADuDLj6Q39AQlx6tBhiGDzllp8pmhfz2Vwr2YZM9dcDG&itag=251&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1745091297%2C&mh=Ka&mm=31%2C26&mn=sn-4g5edndr%2Csn-h0jelne7&ms=au%2Conr&mv=m&mvi=4&pl=37&rms=au%2Cau&gcr=de&initcwndbps=2462500&bui=AccgBcP-I7iMunWNslKxpWC7VJwLDBf192FLfV7H0FMEuOk8phsqJ-W6kLVA-DNmF2ArhJxAn6MWaA0w&vprv=1&svpuc=1&mime=audio%2Fwebm&ns=UxQ-yd3tH1M64yYzEkEVLNwQ&rqh=1&gir=yes&clen=5365282&dur=359.161&lmt=1714723233287726&mt=1745090921&fvip=5&keepalive=yes&lmw=1&c=TVHTML5&sefc=1&txp=2318224&n=WLwhV392eJXOVQ&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cgcr%2Cbui%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=ACuhMU0wRQIgZRmPju7X5QNbkfvzlFLpLNqbK2dyTIfsPouBmqqF4J8CIQD4ySusEdLJE72sloNoF6W2rs1yfJdgiifiTspjsLe3Yw%3D%3D&sig=AJfQdSswRAIgE3u1Kf1P8riOPCsGN-q62SXZKXMDWE1HYh4cT0j70KICIA_V2b6IvUjqXHfEuyiCutDAxgtrHoJQnib9Rwwb6rKY"
 
-                    ffmpeg_options = {
-                        "before_options": f"-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 ",
-                        "options": f"-vn -ss {220} -t {5}",
-                    }
-                    source = discord.FFmpegPCMAudio(url, **ffmpeg_options)
+                # there are intro songs to be played
+                if len(self.intro_playlist) > 0:
+
+                    url = self.intro_playlist.pop()
+                    source = discord.FFmpegPCMAudio(url)
                     def after_playing(error):
                         asyncio.run_coroutine_threadsafe(self.play_next_song(), bot.loop)
 
@@ -212,22 +157,32 @@ class Playlist():
                         self.voice_client.play(source, after=after_playing)
                     except:
                         return
+
+                # no intro songs to be played resume playlist
                 else:
                     if self.song_index > len(self.playlist):
                         print("song index outside of playlist range. song_index: ", str(self.song_index) , " playlist len:" , str(len(self.playlist)))
                         return
-                    #TODO try except
                     info = self.playlist[self.song_index]
 
                     if info is None:
                         return
 
-                    start_time = 0
+                    # this is the case when resuming after playing an intro
+                    if self.was_playing_music:
+                        self.was_playing_music = False
+                        start_time = self.playlist[self.song_index]['start']
+                    else:
+                        start_time = 0
+
+
                     ffmpeg_options = {
                         "before_options": f"-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -ss {start_time}",
                         "options": "-vn",
                     }
+                    self.playlist[self.song_index]['start_timestamp'] = time.time()
                     source = discord.FFmpegPCMAudio(info['info']['url'], **ffmpeg_options)
+
                     def after_playing(error):
                         asyncio.run_coroutine_threadsafe(self.play_next_song(), bot.loop)
 
@@ -279,7 +234,6 @@ ydl_opts = {
     'noplaylist': True,
     "cookiefile": cookie_path,
 }
-
 
 @bot.command()
 async def join(ctx):
@@ -357,10 +311,6 @@ async def play(ctx, url: str):
 
     info = ""
     try:
-        # Use functools.partial to pass arguments to the blocking function
-        # The first argument to run_in_executor is the executor (None uses default ThreadPoolExecutor)
-        # The second is the function to run
-        # Subsequent arguments are passed TO that function
         print("start download")
         info = await loop.run_in_executor(
             None,  # Use the default executor
@@ -394,9 +344,8 @@ async def prev(ctx):
     """Skips to the next song."""
     global playlist, lock
 
+    await ctx.send("⏭️ Skipping to previous song.")
     await playlist.prev()
-    # await ctx.send("⏭️ Skipping to next song.")
-    # await ctx.send("nothing to skip...")
 
 
 @bot.command()
@@ -404,9 +353,8 @@ async def next(ctx):
     """Skips to the next song."""
     global playlist, lock
 
+    await ctx.send("⏭️ Skipping to next song.")
     await playlist.next()
-    # await ctx.send("⏭️ Skipping to next song.")
-    # await ctx.send("nothing to skip...")
 
 
 @bot.command()
@@ -455,11 +403,39 @@ async def on_voice_state_update(member, before, after):
         voice_client = discord.utils.get(bot.voice_clients, guild=member.guild)
         if voice_client and voice_client.channel == after.channel:
             print("ell")
-            playlist.intro_playlist.append("hello")
+            playlist.intro_playlist.append(str(member.id) + ".mp3")
             if voice_client and playlist.voice_client.is_playing():
+
+                initial_start = playlist.playlist[playlist.song_index]['start']
+                start = playlist.playlist[playlist.song_index]['start_timestamp']
+                new_start = time.time() - start
+                playlist.playlist[playlist.song_index]['start'] = new_start + initial_start
+                playlist.was_playing_music = True
                 playlist.voice_client.stop()
+
+            # what if paused ?
             else:
                 await playlist.play_song()
+
+
+@bot.command()
+async def set_intro(ctx, url: str, start_time: int, stop_time: int):
+    """[url] [start_time_seconds] [stop_time_seconds] . example: youtube.com/watchdd 82 90   sets the intro song for a user. will play everytime the user joins the channel. every user can only have one. new song will overwrite old one"""
+    global voice_client
+
+    print(f"start:{start_time}, stop: {stop_time}, user_id: {ctx.author.id}, url: {url}")
+
+    # Validate inputs
+    if start_time < 0 or stop_time <= start_time:
+        await ctx.send("Invalid times! Start time must be >= 0 and stop time must be > start time.")
+        return
+
+    # Start the processing in a background thread
+    thread = threading.Thread(
+        target=download_audio_snippet,
+        args=(url, start_time, stop_time, ctx.author.id)
+    )
+    thread.start()
 
 
 @bot.command()
@@ -498,7 +474,6 @@ async def search(ctx, *, query: str):
             blocking_call
         )
         print(f"[{ctx.guild.id}] Finished YT search for: {query}")
-
 
 
         # --- Process the result ---
