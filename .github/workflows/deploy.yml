@@ -14,6 +14,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4 # Action to get your repository code
 
+      - name: Copy files to VPS
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          source: "experimental"  # Copy everything (you can specify src folders like "src/*" if needed)
+          target: ${{ secrets.BOT_DIR }}
+
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@master # Popular action for SSH commands
         with:
