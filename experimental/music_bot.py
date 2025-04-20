@@ -14,6 +14,8 @@ from collections import deque
 from dotenv import load_dotenv
 
 
+# TODO make two bots
+
 #   ctx
 #   channel = ctx.author.voice.channel
 #   store the channel so i can connect to it
@@ -59,9 +61,6 @@ class Playlist():
         self.song_index = 0
         self.current_song = None
         self.lock = asyncio.Lock()
-
-        self.intro_playlist = []
-        self.was_playing_music = False
 
         self.voice_client = None
 
@@ -127,39 +126,19 @@ class Playlist():
             if self.voice_client and (self.voice_client.is_paused() or self.voice_client.is_playing()):
                 self.voice_client.stop()
 
+
     async def play_next_song(self):
         async with self.lock:
-            if len(self.intro_playlist) > 0:
+            next_index = self.song_index + 1
+
+            if 0 <= next_index < len(self.playlist):
+                self.song_index = next_index
                 asyncio.create_task(self.play_song())
 
-            elif self.was_playing_music:
-                asyncio.create_task(self.play_song())
-            else:
-                next_index = self.song_index + 1
-
-                if 0 <= next_index < len(self.playlist):
-                    self.song_index = next_index
-                    asyncio.create_task(self.play_song())
 
     async def play_song(self):
         async with self.lock:
             if self.voice_client and self.voice_client.is_connected() and not self.voice_client.is_playing() and not self.voice_client.is_paused():
-
-                # there are intro songs to be played
-                if len(self.intro_playlist) > 0:
-
-                    url = self.intro_playlist.pop()
-                    source = discord.FFmpegPCMAudio(url)
-                    def after_playing(error):
-                        asyncio.run_coroutine_threadsafe(self.play_next_song(), bot.loop)
-
-                    try:
-                        self.voice_client.play(source, after=after_playing)
-                    except:
-                        return
-
-                # no intro songs to be played resume playlist
-                else:
                     if self.song_index > len(self.playlist):
                         print("song index outside of playlist range. song_index: ", str(self.song_index) , " playlist len:" , str(len(self.playlist)))
                         return
@@ -168,14 +147,7 @@ class Playlist():
                     if info is None:
                         return
 
-                    # this is the case when resuming after playing an intro
-                    if self.was_playing_music:
-                        self.was_playing_music = False
-                        start_time = self.playlist[self.song_index]['start']
-                    else:
-                        start_time = 0
-
-
+                    start_time = 0
                     ffmpeg_options = {
                         "before_options": f"-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -ss {start_time}",
                         "options": "-vn",
@@ -190,6 +162,7 @@ class Playlist():
                         self.voice_client.play(source, after=after_playing)
                     except:
                         return
+
 
     async def get_playlist_view(self):
         """Returns a formatted string list of the current playlist."""
@@ -391,53 +364,6 @@ async def show_queue(ctx):
     await ctx.send(f"```md\n{playlist_str}\n```")
 
 
-@bot.event
-async def on_voice_state_update(member, before, after):
-    # Ignore bot users
-    if member.bot:
-        return
-
-    # Check if the member joined a voice channel
-    if before.channel is None and after.channel is not None:
-        # Get the bot's voice client for the guild
-        voice_client = discord.utils.get(bot.voice_clients, guild=member.guild)
-        if voice_client and voice_client.channel == after.channel:
-            print("ell")
-            playlist.intro_playlist.append(str(member.id) + ".mp3")
-            if voice_client and playlist.voice_client.is_playing():
-
-                initial_start = playlist.playlist[playlist.song_index]['start']
-                start = playlist.playlist[playlist.song_index]['start_timestamp']
-                new_start = time.time() - start
-                playlist.playlist[playlist.song_index]['start'] = new_start + initial_start
-                playlist.was_playing_music = True
-                playlist.voice_client.stop()
-
-            # what if paused ?
-            else:
-                await playlist.play_song()
-
-
-@bot.command()
-async def set_intro(ctx, url: str, start_time: int, stop_time: int):
-    """[url] [start_time_seconds] [stop_time_seconds] . example: youtube.com/watchdd 82 90   sets the intro song for a user. will play everytime the user joins the channel. every user can only have one. new song will overwrite old one"""
-    global voice_client
-
-    print(f"start:{start_time}, stop: {stop_time}, user_id: {ctx.author.id}, url: {url}")
-
-    # Validate inputs
-    if start_time < 0 or stop_time <= start_time:
-        await ctx.send("Invalid times! Start time must be >= 0 and stop time must be > start time.")
-        return
-
-    # Start the processing in a background thread
-    thread = threading.Thread(
-        target=download_audio_snippet,
-        args=(url, start_time, stop_time, ctx.author.id)
-    )
-    thread.start()
-
-
 @bot.command()
 async def search(ctx, *, query: str):
     """!search [query] # Searches YouTube and returns the first video link."""
@@ -491,7 +417,11 @@ async def search(ctx, *, query: str):
                     functools.partial(yt_dlp.YoutubeDL(ydl_opts).extract_info, video_url, download=False)
                 )
 
-                await playlist.add_song(info)
+                if playlist.voice_client.is_playing():
+                    await playlist.add_song(info)
+                else:
+                    await playlist.add_song(info)
+                    await playlist.play_song()
             else:
                 # This shouldn't happen often if an entry is found
                 await ctx.send(f"Found a result for `{query}`, but couldn't extract its URL.")

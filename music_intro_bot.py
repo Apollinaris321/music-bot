@@ -14,6 +14,8 @@ from collections import deque
 from dotenv import load_dotenv
 
 
+# TODO make two bots
+
 #   ctx
 #   channel = ctx.author.voice.channel
 #   store the channel so i can connect to it
@@ -491,7 +493,11 @@ async def search(ctx, *, query: str):
                     functools.partial(yt_dlp.YoutubeDL(ydl_opts).extract_info, video_url, download=False)
                 )
 
-                await playlist.add_song(info)
+                if playlist.voice_client.is_playing():
+                    await playlist.add_song(info)
+                else:
+                    await playlist.add_song(info)
+                    await playlist.play_song()
             else:
                 # This shouldn't happen often if an entry is found
                 await ctx.send(f"Found a result for `{query}`, but couldn't extract its URL.")
@@ -510,6 +516,52 @@ async def search(ctx, *, query: str):
         await ctx.send(f"An unexpected error occurred during the search.")
         print(f"Unexpected search error for '{query}': {e}")
         # Optionally log the full traceback here for debugging
+
+
+def download_audio_snippet(url="", start=0, stop=0, output_file="snippet"):
+    print(f"download_audio_snippet: start:{start}, stop:{stop} url:{url}, output_file:{output_file}")
+    output_file = str(output_file)
+    cookie_path = "cookies.txt"
+
+    if start > stop:
+        return
+
+    if stop - start > 20:
+        return
+
+    if os.path.exists(f"{output_file}.mp3"):
+        os.remove(f"{output_file}.mp3")
+
+    if stop:
+        stop = int(stop)
+    if start:
+        start = int(start)
+
+    if stop == 0:
+        stop = start + 5
+
+    options = {
+        "format": "bestaudio",
+        "postprocessors": [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+        }],
+        "postprocessor_args": [
+            "-ss", str(start), "-to", str(stop)
+        ],
+        'outtmpl': output_file,
+        'quiet': False,
+        'no_warnings': True,
+        'verbose': False,
+        'logger': None,
+        'progress_hooks': [],
+        "cookiefile": cookie_path,
+    }
+
+    with yt_dlp.YoutubeDL(options) as ydl:
+        ydl.download([url])
+
+    print(f"Audio snippet saved as {output_file}")
 
 
 # Run the bot

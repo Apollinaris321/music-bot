@@ -1,3 +1,5 @@
+import functools
+
 import discord
 from discord.ext import commands
 import yt_dlp
@@ -12,24 +14,15 @@ from collections import deque
 from dotenv import load_dotenv
 
 
-# TODO only plays music no intros
+# TODO make two bots
 
-
-
-#TODO
-# - dont allow more than 10 songs
-# - predownload links for the queue -> less lag
-# - ffmpeg is really slow ????? bug
-# - print queue
-# - was passiert wenn mehrere joinen wegen intro song?
-# - when play also automatically join
-# - change set_intro
-# - set_intro seconds make 00:00 format
-# - maybe have two bots. one for music and the other for the intros ?
-# - the intro bot could just paste the pause/resume commands
-# - change the download of intros to just streaming them
-# - prefetch the intro songs url
-
+#   ctx
+#   channel = ctx.author.voice.channel
+#   store the channel so i can connect to it
+#   voice_client = await channel.connect()
+#   voice_client.disconnect()
+#   move_to()
+#   is_connected()
 
 # Handle termination signals
 async def shutdown():
@@ -37,18 +30,21 @@ async def shutdown():
     await bot.close()  # Disconnect from Discord
     sys.exit(0)  # Exit script cleanly
 
+
 def signal_handler(sig, frame):
     asyncio.create_task(shutdown())  # Run the shutdown coroutine
+
 
 # Register signal handlers
 signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
-cookie_path = "../cookies.txt"
 
+# pip install --upgrade yt-dlp
+cookie_path = "cookies.txt"
 
 load_dotenv()
-TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+TOKEN = os.getenv("DISCORD_INTRO_BOT_TOKEN")
 
 # Set up bot
 PREFIX = "!"
@@ -58,15 +54,54 @@ intents.voice_states = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 
 
-# VLC alternative - Discord audio
-song_queue = deque()
-voice_client = None
-current_song = None  # To store the current song's info
-start_time_tracker = 0  # Manual tracking of start time
+# Global context
+class Playlist():
+    def __init__(self, ctx):
+        self.ctx = None
+        self.intro_playlist = []
+        self.lock = asyncio.Lock()
+        self.voice_client = None
 
+    async def add_song(self, userId):
+        async with self.lock:
+            self.intro_playlist.append(userId)
+
+
+    async def reset(self):
+        async with self.lock:
+            if playlist.voice_client:
+                playlist.voice_client.stop()
+                playlist.intro_playlist.clear()
+
+
+    async def play_next_song(self):
+        async with self.lock:
+            if len(self.intro_playlist) > 0:
+                asyncio.create_task(self.play_song())
+
+
+    async def play_song(self):
+        async with self.lock:
+            if self.voice_client and self.voice_client.is_connected() and not self.voice_client.is_playing():
+
+                # there are intro songs to be played
+                if len(self.intro_playlist) > 0:
+
+                    url = self.intro_playlist.pop()
+                    source = discord.FFmpegPCMAudio(url)
+                    def after_playing(error):
+                        asyncio.run_coroutine_threadsafe(self.play_next_song(), bot.loop)
+
+                    try:
+                        self.voice_client.play(source, after=after_playing)
+                    except:
+                        return
+
+
+playlist = Playlist(ctx=None)
 
 ydl_opts = {
-    'format': 'bestaudio/best',
+    'format': 'bestaudio/best/worstaudio/worst',
     'quiet': True,
     'no_warnings': True,
     'verbose': False,
@@ -75,47 +110,118 @@ ydl_opts = {
 }
 
 
-#await play_song(ctx.author.voice.channel , url)
-async def play_next(ctx):
-    """Play the next song in the queue."""
-    global voice_client, current_song, start_time_tracker
-    if len(song_queue) > 0:
-        url = song_queue.popleft()
-        current_song = None
-        start_time_tracker = 0
-        await play_song(ctx.author.voice.channel , url)
+@bot.command()
+async def join(ctx):
+    """Joins the voice channel of the user."""
+    global playlist
+
+    if not ctx.author.voice or not ctx.author.voice.channel:
+        await ctx.send(f"{ctx.author.mention}, you need to be in a voice channel first!")
+        return
+
+    async with playlist.lock:
+        # Get the voice channel the user is in
+        channel = ctx.author.voice.channel
+        voice_client = ctx.voice_client
+
+        if voice_client is None:
+            # Bot is not connected to any voice channel in this guild, try to connect
+            try:
+                playlist.voice_client = await channel.connect()
+                await ctx.send(f"Successfully joined `{channel.name}`!")
+            except discord.Forbidden:
+                await ctx.send(f"I don't have permission to join `{channel.name}`.")
+            except discord.ClientException as e:
+                await ctx.send(f"Failed to join the channel: {e}") # E.g., Already connecting
+            except Exception as e:
+                await ctx.send(f"An unexpected error occurred: {e}")
+                print(f"Error joining channel {channel.id}: {e}") # Log for debugging
+
+        elif voice_client.is_connected():
+            # Bot is already connected in this guild
+            if voice_client.channel == channel:
+                # Bot is already in the SAME channel as the user
+                await ctx.send(f"I'm already in the channel: `{channel.name}`")
+            else:
+                # Bot is in a DIFFERENT channel, move to the user's channel
+                try:
+                    await voice_client.move_to(channel)
+                    await ctx.send(f"Moved to `{channel.name}`.")
+                except discord.Forbidden:
+                    await ctx.send(f"I don't have permission to move to `{channel.name}`.")
+                except Exception as e:
+                    await ctx.send(f"Failed to move to the channel: {e}")
+                    print(f"Error moving to channel {channel.id}: {e}")
+
+        else:
+            # This case is unlikely if voice_client was not None, but handles edge cases
+            # where voice_client exists but isn't properly connected. Treat as needing to connect.
+            try:
+                playlist.voice_client = await channel.connect()
+                await ctx.send(f"Reconnected to `{channel.name}`!")
+            except Exception as e:
+                await ctx.send(f"An error occurred while trying to connect/reconnect: {e}")
+                print(f"Error reconnecting to channel {channel.id}: {e}")
 
 
-async def play_song(voice_channel, url, start_time=0, resume=False):
-    """Plays audio from a YouTube URL with optional start time."""
-    global voice_client, current_song, start_time_tracker
+@bot.command()
+async def leave(ctx):
+    """Disconnects the bot from voice."""
+    global playlist, lock
 
-    if not voice_client or not voice_client.is_connected():
-        voice_client = await voice_channel.connect()
+    async with playlist.lock:
+        if playlist.voice_client and playlist.voice_client.is_connected():
+            await playlist.reset()
+            await playlist.voice_client.disconnect()
 
-    if resume and current_song:
-        audio_url = current_song["url"]
-    else:
-         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            audio_url = info['url']
-            current_song = {"url": audio_url, "title": info['title'], "position": start_time}
 
-    ffmpeg_options = {
-        "before_options": f"-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -ss {start_time}",
-        "options": "-vn",
-    }
-    source = discord.FFmpegPCMAudio(audio_url, **ffmpeg_options)
-    def after_playing(error):
-        asyncio.run_coroutine_threadsafe(play_next(voice_channel), bot.loop)
+@bot.command()
+async def ireset(ctx):
+    """Stops the current song."""
+    global playlist, lock
+    await playlist.reset()
 
-    voice_client.play(source, after=after_playing)
-    start_time_tracker = time.time()
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    # Ignore bot users
+    if member.bot:
+        return
+
+    # Check if the member joined a voice channel
+    if before.channel is None and after.channel is not None:
+        # Get the bot's voice client for the guild
+        voice_client = discord.utils.get(bot.voice_clients, guild=member.guild)
+        if voice_client and voice_client.channel == after.channel:
+            playlist.intro_playlist.append(str(member.id) + ".mp3")
+            if voice_client and not playlist.voice_client.is_playing():
+                await playlist.play_song()
+
+
+@bot.command()
+async def set_intro(ctx, url: str, start_time: int, stop_time: int):
+    """[url] [start_time_seconds] [stop_time_seconds] . example: youtube.com/watchdd 82 90   sets the intro song for a user. will play everytime the user joins the channel. every user can only have one. new song will overwrite old one"""
+    global voice_client
+
+    print(f"start:{start_time}, stop: {stop_time}, user_id: {ctx.author.id}, url: {url}")
+
+    # Validate inputs
+    if start_time < 0 or stop_time <= start_time:
+        await ctx.send("Invalid times! Start time must be >= 0 and stop time must be > start time.")
+        return
+
+    # Start the processing in a background thread
+    thread = threading.Thread(
+        target=download_audio_snippet,
+        args=(url, start_time, stop_time, ctx.author.id)
+    )
+    thread.start()
 
 
 def download_audio_snippet(url="", start=0, stop=0, output_file="snippet"):
     print(f"download_audio_snippet: start:{start}, stop:{stop} url:{url}, output_file:{output_file}")
     output_file = str(output_file)
+    cookie_path = "cookies.txt"
 
     if start > stop:
         return
@@ -156,138 +262,6 @@ def download_audio_snippet(url="", start=0, stop=0, output_file="snippet"):
         ydl.download([url])
 
     print(f"Audio snippet saved as {output_file}")
-
-
-@bot.command()
-async def join(ctx):
-    """Joins the voice channel of the user."""
-    global voice_client
-    if ctx.author.voice:
-        voice_client = await ctx.author.voice.channel.connect()
-    else:
-        await ctx.send("You need to be in a voice channel!")
-
-
-@bot.command()
-async def leave(ctx):
-    """Disconnects the bot from voice."""
-    global voice_client
-    if voice_client and voice_client.is_connected():
-        await voice_client.disconnect()
-        voice_client = None
-
-
-@bot.command()
-async def play(ctx, url: str):
-    """!play [url]   #Adds a song to the queue or plays immediately if idle."""
-    if voice_client and voice_client.is_playing():
-        song_queue.append(url)
-        await ctx.send("🎵 Added to queue.")
-    else:
-        await play_song(ctx.author.voice.channel , url)
-
-
-
-async def play_intro(member):
-    """Plays the local intro song, then resumes the previous song from its last position."""
-    global voice_client, current_song, start_time_tracker
-
-    if not voice_client or not voice_client.is_connected():
-        return
-
-    #if no song is currently playing then connect to voice channel
-    if not voice_client or not voice_client.is_connected():
-        voice_client = await member.voice.channel.connect()
-
-    paused_time = None
-    if voice_client.is_playing():
-        voice_client.pause()
-        paused_time = time.time() - start_time_tracker
-
-    # Play the intro file
-    if os.path.exists(f"{member.id}.mp3"):
-        intro_source = discord.FFmpegPCMAudio(f"{member.id}.mp3")
-        voice_client.play(intro_source)
-
-        while voice_client.is_playing():
-            await asyncio.sleep(0.5)
-
-    if current_song and paused_time is not None:
-        # possible bug for start time watch out!
-        await play_song(member.voice.channel, current_song["url"], start_time=paused_time, resume=True)
-
-
-@bot.command()
-async def stop(ctx):
-    """Stops the current song."""
-    global current_song, start_time_tracker
-    if voice_client and voice_client.is_playing():
-        voice_client.stop()
-        current_song = None
-        start_time_tracker = 0
-        await ctx.send("⏹️ Stopped playback.")
-
-
-@bot.command()
-async def pause(ctx):
-    """Pauses the audio."""
-    if voice_client and voice_client.is_playing():
-        voice_client.pause()
-        await ctx.send("⏸️ Paused.")
-
-
-@bot.command()
-async def resume(ctx):
-    """Resumes the audio."""
-    if voice_client and voice_client.is_paused():
-        voice_client.resume()
-        await ctx.send("▶️ Resumed.")
-
-
-@bot.command()
-async def next(ctx):
-    """Skips to the next song."""
-    global current_song, start_time_tracker
-    if voice_client and voice_client.is_playing():
-        voice_client.stop()
-        current_song = None
-        start_time_tracker = 0
-        await play_next(ctx)
-        await ctx.send("⏭️ Skipping to next song.")
-
-
-@bot.command()
-async def set_intro(ctx, url: str, start_time: int, stop_time: int):
-    """[url] [start_time_seconds] [stop_time_seconds] . example: youtube.com/watchdd 82 90   sets the intro song for a user. will play everytime the user joins the channel. every user can only have one. new song will overwrite old one"""
-    print(f"start:{start_time}, stop: {stop_time}, user_id: {ctx.author.id}, url: {url}")
-
-    # Validate inputs
-    if start_time < 0 or stop_time <= start_time:
-        await ctx.send("Invalid times! Start time must be >= 0 and stop time must be > start time.")
-        return
-
-    # Start the processing in a background thread
-    thread = threading.Thread(
-        target=download_audio_snippet,
-        args=(url, start_time, stop_time, ctx.author.id)
-    )
-    thread.start()
-
-
-@bot.event
-async def on_voice_state_update(member, before, after):
-    bot_voice_channel = None
-
-    # Get the bot's current voice channel
-    for vc in bot.voice_clients:
-        if vc.guild == member.guild:
-            bot_voice_channel = vc.channel
-            break
-
-    # Check if the user joined the same channel as the bot
-    if bot_voice_channel and after.channel == bot_voice_channel and before.channel != bot_voice_channel:
-        print(f"{member.name} joined {bot_voice_channel.name}!")
-        await play_intro(member)
 
 
 # Run the bot
