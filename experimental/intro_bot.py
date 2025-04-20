@@ -1,7 +1,7 @@
 import functools
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import yt_dlp
 import asyncio
 import queue
@@ -196,6 +196,21 @@ async def on_voice_state_update(member, before, after):
             playlist.intro_playlist.append(str(member.id) + ".mp3")
             if voice_client and not playlist.voice_client.is_playing():
                 await playlist.play_song()
+
+
+
+@tasks.loop(minutes=5)
+async def auto_disconnect_if_alone():
+    for vc in bot.voice_clients:
+        channel = vc.channel
+        members = channel.members
+
+        # Count non-bot members
+        non_bots = [m for m in members if not m.bot]
+
+        if len(non_bots) == 0:
+            print(f"Bot is alone in {channel.name}, disconnecting...")
+            await vc.disconnect()
 
 
 @bot.command()

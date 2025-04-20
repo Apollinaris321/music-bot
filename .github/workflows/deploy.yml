@@ -58,11 +58,12 @@ jobs:
             # --- Choose ONE restart method ---
             
             # Stop the bot
-            stop_music_bot.sh
-            sleep 2 # Give it a moment to stop
+            ./stop_music_bot.sh
+            # Give it a moment to stop
+            sleep 2 
             
             # Start the bot afterwards
-            # start_music_bot.sh
+            ./start_music_bot.sh
 
             # Method A: Using pkill and nohup (Simpler, less robust)
             # Stop any existing bot process (|| true prevents error if not running)
