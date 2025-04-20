@@ -1,0 +1,4 @@
+- a command can only be executed if the last one finishes
+- depends on priority 
+- commands with a lower priority cant kick off commands with a higher priority
+- 

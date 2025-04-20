@@ -15,7 +15,6 @@ from dotenv import load_dotenv
 
 #TODO
 # - dont allow more than 10 songs
-# - host on website
 # - predownload links for the queue -> less lag
 # - ffmpeg is really slow ????? bug
 # - print queue
