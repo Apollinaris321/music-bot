@@ -8,7 +8,8 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest # Use a standard GitHub runner
+    runs-on: ubuntu-latest-large
+    # runs-on: ubuntu-latest # Use a standard GitHub runner
 
     steps:
       - name: Checkout code
