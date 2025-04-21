@@ -41,7 +41,7 @@ signal.signal(signal.SIGINT, signal_handler)
 
 
 # pip install --upgrade yt-dlp
-cookie_path = "cookies.txt"
+cookie_path = "experimental/cookies.txt"
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")

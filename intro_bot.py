@@ -197,7 +197,7 @@ async def on_voice_state_update(member, before, after):
         # Get the bot's voice client for the guild
         voice_client = discord.utils.get(bot.voice_clients, guild=member.guild)
         if voice_client and voice_client.channel == after.channel:
-            playlist.intro_playlist.append(str(member.id) + ".mp3")
+            playlist.intro_playlist.append("intro_songs/" + str(member.id) + ".mp3")
             if voice_client and not playlist.voice_client.is_playing():
                 await playlist.play_song()
 
@@ -239,7 +239,7 @@ async def set_intro(ctx, url: str, start_time: int, stop_time: int):
 
 def download_audio_snippet(url="", start=0, stop=0, output_file="snippet"):
     print(f"download_audio_snippet: start:{start}, stop:{stop} url:{url}, output_file:{output_file}")
-    output_file = str(output_file)
+    output_file = "intro_songs/" + str(output_file)
     cookie_path = "cookies.txt"
 
     if start > stop:

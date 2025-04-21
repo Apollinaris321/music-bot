@@ -21,7 +21,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          source: "experimental"  # Copy everything (you can specify src folders like "src/*" if needed)
+          source: "./."  # Copy everything (you can specify src folders like "src/*" if needed)
           target: ${{ secrets.BOT_DIR }}
 
       # Step 2: Run update and restart commands on the VPS
