@@ -66,13 +66,11 @@ class Playlist():
         async with self.lock:
             self.intro_playlist.append(userId)
 
-
     async def reset(self):
         async with self.lock:
-            if playlist.voice_client:
-                playlist.voice_client.stop()
-                playlist.intro_playlist.clear()
-
+            if self.voice_client:
+                self.voice_client.stop()
+                self.intro_playlist.clear()
 
     async def play_next_song(self):
         async with self.lock:
@@ -167,12 +165,10 @@ async def join(ctx):
 @bot.command()
 async def leave(ctx):
     """Disconnects the bot from voice."""
-    global playlist, lock
-
-    async with playlist.lock:
-        if playlist.voice_client and playlist.voice_client.is_connected():
-            await playlist.reset()
-            await playlist.voice_client.disconnect()
+    global playlist
+    if playlist.voice_client and playlist.voice_client.is_connected():
+        await playlist.reset()
+        await playlist.voice_client.disconnect()
 
 
 @bot.command()
