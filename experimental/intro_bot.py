@@ -6,7 +6,6 @@ import yt_dlp
 import asyncio
 import queue
 import os
-import time
 import threading
 import sys
 import signal
