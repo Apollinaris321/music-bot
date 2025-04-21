@@ -30,6 +30,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}              # VPS IP address from secrets
           username: ${{ secrets.VPS_USER }}          # VPS username from secrets
           key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}   # SSH private key from secrets
+          script_stop: false
           script: | # Commands to run ON the VPS
             # Navigate to the bot directory
             cd ${{ secrets.BOT_DIR }}
@@ -59,9 +60,10 @@ jobs:
             # --- Choose ONE restart method ---
             
             # Stop the bot
-            ./stop_music_bot.sh || true
+            ./stop_music_bot.sh "music_bot.py" || true
+            ./stop_music_bot.sh "intro_bot.py" || true
             # Give it a moment to stop
-            sleep 10
+            sleep 60
             
             # Start the bot afterwards
             ./start_music_bot.sh
