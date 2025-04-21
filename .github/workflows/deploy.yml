@@ -24,87 +24,37 @@ jobs:
           source: "experimental"  # Copy everything (you can specify src folders like "src/*" if needed)
           target: ${{ secrets.BOT_DIR }}
 
-      - name: Deploy to VPS via SSH
-        uses: appleboy/ssh-action@master # Popular action for SSH commands
+      # Step 2: Run update and restart commands on the VPS
+      - name: Update Dependencies and Restart Service
+        uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.VPS_HOST }}              # VPS IP address from secrets
-          username: ${{ secrets.VPS_USER }}          # VPS username from secrets
-          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}   # SSH private key from secrets
-          script_stop: false
-          script: | # Commands to run ON the VPS
-            # Navigate to the bot directory
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          script: |
+            echo "Executing commands in target directory: ${{ secrets.BOT_DIR }}"
             cd ${{ secrets.BOT_DIR }}
 
-            # --- Option 1: Update using Git (If you have git setup on server) ---
-            # Ensure the directory is a git repo and pull changes
-            # git stash # Stash local changes if any (e.g., log files) - Be careful!
-            # git pull origin main
-            # git stash pop # Try to reapply stashed changes
-
-            # --- Option 2: Use the code copied by ssh-action (Simpler) ---
-            # The ssh-action implicitly copies the checked-out repo content
-            # to a temporary location on the server before running the script.
-            # We just need to make sure it ends up in the right place or
-            # run commands assuming we are in the correct directory.
-            # (appleboy/ssh-action copies files BEFORE running the script)
-            # Let's assume BOT_DIR is the target and action syncs it.
-
-            echo "Updating dependencies..."
-            # Activate virtual environment (Adjust path if needed)
+            echo "Updating Python dependencies..."
+            # Activate virtual environment using the path from secrets
             source ${{ secrets.VENV_PATH }}/bin/activate
 
-            # Install/update dependencies
+            # Install dependencies
             pip install -r requirements.txt
 
-            echo "Restarting the bot..."
-            # --- Choose ONE restart method ---
+            echo "Restarting the discord-music-bot service via systemd..."
+            # Use sudo because systemctl requires root privileges
+            # Ensure 'music_bot.service' matches the filename you created
+            sudo systemctl restart music_bot.service 
+            sudo systemctl restart intro_bot.service 
+
+            # Optional: Add a small delay and check status
+            sleep 40
             
-            # Stop the bot
-            ./stop_music_bot.sh "music_bot.py" || true
-            ./stop_music_bot.sh "intro_bot.py" || true
-            # Give it a moment to stop
-            sleep 60
+            echo "Checking service status (output below):"
+            sudo systemctl status music_bot.service --no-pager
             
-            # Start the bot afterwards
-            ./start_music_bot.sh
+            echo "Checking discord-intro-bot status (output below):"
+            sudo systemctl status intro_bot.service --no-pager
 
-            # Method A: Using pkill and nohup (Simpler, less robust)
-            # Stop any existing bot process (|| true prevents error if not running)
-            # pkill -f music_bot.py || true
-            # sleep 2 # Give it a moment to stop
-            # Start the bot in the background, redirect output
-            # nohup python3 music_bot.py > bot.log 2>&1 &
-
-            # Method B: Using systemd (Recommended for robustness)
-            # Replace 'discord-music-bot.service' with your actual service name
-            # sudo systemctl restart discord-music-bot.service
-
-            echo "Deployment complete!"
-
-      # Optional: Use rsync for more efficient file transfer (instead of scp used by appleboy)
-      # - name: Deploy files via rsync
-      #   uses: easingthemes/ssh-deploy@v5.1.0
-      #   with:
-      #       SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-      #       REMOTE_HOST: ${{ secrets.VPS_HOST }}
-      #       REMOTE_USER: ${{ secrets.VPS_USER }}
-      #       SOURCE: "./"  # Source directory on runner
-      #       TARGET: ${{ secrets.BOT_DIR }} # Target directory on VPS
-      #       ARGS: "-rlgoDzvc -i --delete" # rsync arguments
-
-      # - name: Run post-deploy commands (if using rsync step above)
-      #   uses: appleboy/ssh-action@master
-      #   with:
-      #     host: ${{ secrets.VPS_HOST }}
-      #     username: ${{ secrets.VPS_USER }}
-      #     key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-      #     script: |
-      #       cd ${{ secrets.BOT_DIR }}
-      #       source ${{ secrets.VENV_PATH }}/bin/activate
-      #       pip install -r requirements.txt
-      #       # Restart using Method A or B from above
-      #       pkill -f music_bot.py || true
-      #       sleep 2
-      #       nohup python3 music_bot.py > bot.log 2>&1 &
-      #       # sudo systemctl restart discord-music-bot.service
-      #       echo "Post-deploy steps complete!"
+            echo "Deployment steps complete."
