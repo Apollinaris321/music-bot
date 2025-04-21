@@ -61,7 +61,7 @@ jobs:
             # Stop the bot
             ./stop_music_bot.sh || true
             # Give it a moment to stop
-            sleep 2 
+            sleep 1 
             
             # Start the bot afterwards
             ./start_music_bot.sh
