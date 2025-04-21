@@ -106,6 +106,15 @@ ydl_opts = {
     "cookiefile": cookie_path,
 }
 
+@bot.event
+async def on_ready():
+    print(f'Logged in as {bot.user.name}')
+    print(f'Bot ID: {bot.user.id}')
+    print('Bot is ready and online!')
+    # Start the background task AFTER the bot is ready
+    if not auto_disconnect_if_alone.is_running():
+        auto_disconnect_if_alone.start()
+    print("Auto-disconnect task started.")
 
 @bot.command()
 async def join(ctx):
