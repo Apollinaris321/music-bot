@@ -58,7 +58,7 @@ jobs:
             # --- Choose ONE restart method ---
             
             # Stop the bot
-            ./stop_music_bot.sh
+            ./stop_music_bot.sh || true
             # Give it a moment to stop
             sleep 2 
             
